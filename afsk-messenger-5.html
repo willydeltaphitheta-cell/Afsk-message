@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AFSK Messenger</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e0f;
+    --panel: #0f1517;
+    --border: #1e2d2f;
+    --accent: #00e5c0;
+    --accent2: #ff4f5e;
+    --text: #c8d8d9;
+    --dim: #4a6264;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Rajdhani', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+
+  header {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+  }
+
+  header span {
+    font-size: 0.75rem;
+    color: var(--dim);
+    font-family: var(--mono);
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    margin-left: auto;
+    transition: background 0.3s;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  .status-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 1s infinite;
+  }
+  .status-dot.rx { background: #ffd700; box-shadow: 0 0 8px #ffd700; }
+  .status-dot.sync { background: #ff8c00; box-shadow: 0 0 8px #ff8c00; animation: pulse 0.4s infinite; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  .main {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* Config bar */
+  .config {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+
+  .cfg-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cfg-item b { color: var(--accent); }
+
+  /* Log */
+  .log {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    height: 260px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.7;
+    scroll-behavior: smooth;
+  }
+
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: var(--bg); }
+  .log::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-line { display: flex; gap: 10px; }
+  .log-time { color: var(--dim); flex-shrink: 0; }
+  .log-tx { color: var(--accent); }
+  .log-rx { color: #ffd700; }
+  .log-info { color: var(--dim); }
+  .log-err { color: var(--accent2); }
+
+  /* Waveform */
+  canvas {
+    width: 100%;
+    height: 72px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: block;
+  }
+
+  /* Input area */
+  .input-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    resize: none;
+    height: 72px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+
+  .btn-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  button {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.07em;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .btn-tx {
+    background: var(--accent);
+    color: #000;
+    flex: 1;
+  }
+
+  .btn-rx {
+    background: transparent;
+    border: 1px solid #ffd700;
+    color: #ffd700;
+    flex: 1;
+  }
+
+  .btn-rx.listening {
+    background: #ffd70022;
+  }
+
+  /* Mic permission modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-overlay.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 32px 28px;
+    max-width: 380px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 0 40px rgba(0,229,192,0.12);
+    transform: translateY(12px);
+    transition: transform 0.25s;
+  }
+  .modal-overlay.show .modal { transform: translateY(0); }
+
+  .modal-icon {
+    font-size: 2.2rem;
+    text-align: center;
+  }
+  .modal h2 {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--accent);
+    text-align: center;
+    letter-spacing: 0.06em;
+  }
+  .modal p {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.6;
+    text-align: center;
+  }
+  .modal p b { color: var(--accent); }
+  .modal-note {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--dim);
+    text-align: center;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+  }
+  .modal-btns {
+    display: flex;
+    gap: 10px;
+  }
+  .btn-allow {
+    flex: 1;
+    background: var(--accent);
+    color: #000;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 11px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: opacity 0.15s;
+  }
+  .btn-allow:hover { opacity: 0.85; }
+  .btn-deny {
+    flex: 1;
+    background: transparent;
+    color: var(--dim);
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .btn-deny:hover { color: var(--accent2); border-color: var(--accent2); }
+
+  /* footer info */
+  .footer {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--dim);
+    text-align: center;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AFSK//MSG</h1>
+  <span>Bell 202 · 1200 baud · CRC-16</span>
+  <div class="status-dot" id="dot"></div>
+</header>
+
+<div class="main">
+
+  <div class="config">
+    <div class="cfg-item">MARK <b>1200 Hz</b></div>
+    <div class="cfg-item">SPACE <b>2200 Hz</b></div>
+    <div class="cfg-item">BAUD <b>1200</b></div>
+    <div class="cfg-item">FRAME <b>8N1</b></div>
+    <div class="cfg-item">CRC <b>CRC-16/CCITT</b></div>
+    <div class="cfg-item">SYNC <b>0xAB12</b></div>
+  </div>
+
+  <canvas id="wave"></canvas>
+
+  <div class="log" id="log">
+    <div class="log-line"><span class="log-time">--:--:--</span><span class="log-info">System ready. Type a message and press SEND, or press LISTEN to decode incoming AFSK.</span></div>
+  </div>
+
+  <div class="input-row">
+    <textarea id="msg" placeholder="Type message..." maxlength="200"></textarea>
+    <div class="btn-col">
+      <button class="btn-tx" id="btnSend" onclick="sendMessage()">▶ SEND</button>
+      <button class="btn-rx" id="btnListen" onclick="toggleListen()">◉ LISTEN</button>
+    </div>
+  </div>
+
+  <div class="footer">Audio via Web Audio API · Works loopback or over radio/phone line</div>
+
+</div>
+
+<!-- Mic Permission Modal -->
+<div class="modal-overlay" id="micModal">
+  <div class="modal">
+    <div class="modal-icon">🎙️</div>
+    <h2>MICROPHONE ACCESS</h2>
+    <p>To decode incoming AFSK signals, this app needs access to your <b>microphone</b>.<br><br>Audio is processed locally in your browser — nothing is sent to any server.</p>
+    <div class="modal-btns">
+      <button class="btn-allow" onclick="grantMic()">Allow</button>
+      <button class="btn-deny" onclick="denyMic()">Deny</button>
+    </div>
+    <div class="modal-note">Your browser will also show its own permission prompt after you click Allow.</div>
+  </div>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────
+const MARK      = 1200;
+const SPACE     = 2200;
+const BAUD      = 1200;
+const SYNC_WORD = 0xAB12;
+const SYNC_BITS = 16;
+
+// Sample rate is determined at runtime from the AudioContext (Android may use 44100 or 48000)
+// SPB and preamble are computed dynamically after context is created
+let ACTUAL_SR = 44100; // updated on first getCtx()
+let SPB       = Math.round(ACTUAL_SR / BAUD);
+const PREAMBLE_BITS = Math.round(BAUD * 0.25);
+
+// ─── CRC-16/CCITT ─────────────────────────────────────────────
+function crc16(bytes) {
+  let crc = 0xFFFF;
+  for (const b of bytes) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++)
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+    crc &= 0xFFFF;
+  }
+  return crc;
+}
+
+// ─── Packet: [0x7E][len][data...][crcH][crcL][0x7E]
+function buildPacket(text) {
+  const data = new TextEncoder().encode(text);
+  const len = data.length;
+  const payload = new Uint8Array(len + 2);
+  payload.set(data);
+  const c = crc16(data);
+  payload[len]   = (c >> 8) & 0xFF;
+  payload[len+1] = c & 0xFF;
+  // frame: FLAG + LEN + PAYLOAD + FLAG
+  const frame = new Uint8Array(payload.length + 3);
+  frame[0] = 0x7E;
+  frame[1] = len;
+  frame.set(payload, 2);
+  frame[frame.length - 1] = 0x7E;
+  return frame;
+}
+
+function parsePacket(bytes) {
+  // find 0x7E...0x7E
+  const s = bytes.indexOf(0x7E);
+  const e = bytes.lastIndexOf(0x7E);
+  if (s === -1 || e <= s) return null;
+  const inner = bytes.slice(s + 1, e);
+  if (inner.length < 3) return null;
+  const len = inner[0];
+  const data = inner.slice(1, 1 + len);
+  const rxCrc = (inner[1 + len] << 8) | inner[2 + len];
+  const calcCrc = crc16(data);
+  if (rxCrc !== calcCrc) return { ok: false, data };
+  return { ok: true, text: new TextDecoder().decode(data) };
+}
+
+function generateAFSK(packet) {
+  const sr  = ACTUAL_SR;
+  const spb = SPB;
+  const bits = [];
+
+  for (let i = 0; i < PREAMBLE_BITS; i++) bits.push(i & 1);
+  for (let b = SYNC_BITS - 1; b >= 0; b--) bits.push((SYNC_WORD >> b) & 1);
+  for (const byte of packet) {
+    bits.push(0);
+    for (let b = 0; b < 8; b++) bits.push((byte >> b) & 1);
+    bits.push(1);
+  }
+  for (let i = 0; i < 8; i++) bits.push(1);
+
+  const totalSamples = bits.length * spb;
+  const buf = new Float32Array(totalSamples);
+  let phase = 0;
+  for (let i = 0; i < bits.length; i++) {
+    const freq = bits[i] ? MARK : SPACE;
+    const inc  = (2 * Math.PI * freq) / sr;
+    const start = i * spb;
+    for (let s = 0; s < spb; s++) {
+      buf[start + s] = Math.sin(phase);
+      phase += inc;
+    }
+  }
+  return buf;
+}
+
+// ─── Audio context ────────────────────────────────────────────
+let actx = null;
+function getCtx() {
+  if (!actx) {
+    // Do NOT force sampleRate — Android rejects it. Let the browser choose.
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    ACTUAL_SR = actx.sampleRate;
+    SPB = Math.round(ACTUAL_SR / BAUD);
+  }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+
+// ─── Waveform visualiser ──────────────────────────────────────
+const canvas = document.getElementById('wave');
+const ctx2d = canvas.getContext('2d');
+canvas.width = canvas.offsetWidth * devicePixelRatio;
+canvas.height = canvas.offsetHeight * devicePixelRatio;
+
+function drawWave(data, color = '#00e5c0') {
+  const W = canvas.width, H = canvas.height;
+  ctx2d.clearRect(0, 0, W, H);
+  ctx2d.fillStyle = '#0f1517';
+  ctx2d.fillRect(0, 0, W, H);
+  ctx2d.strokeStyle = color;
+  ctx2d.lineWidth = 1.5;
+  ctx2d.beginPath();
+  const step = Math.max(1, Math.floor(data.length / W));
+  for (let x = 0; x < W; x++) {
+    const idx = Math.min(x * step, data.length - 1);
+    const y = (H / 2) + data[idx] * (H / 2 - 4);
+    x === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+  }
+  ctx2d.stroke();
+}
+
+function clearWave() {
+  const W = canvas.width, H = canvas.height;
+  ctx2d.fillStyle = '#0f1517';
+  ctx2d.fillRect(0, 0, W, H);
+  ctx2d.strokeStyle = '#1e2d2f';
+  ctx2d.lineWidth = 1;
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, H/2); ctx2d.lineTo(W, H/2);
+  ctx2d.stroke();
+}
+clearWave();
+
+// ─── Logging ──────────────────────────────────────────────────
+function log(msg, cls = 'log-info') {
+  const now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const el = document.getElementById('log');
+  el.innerHTML += `<div class="log-line"><span class="log-time">${t}</span><span class="${cls}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ─── SEND ─────────────────────────────────────────────────────
+async function sendMessage() {
+  const text = document.getElementById('msg').value.trim();
+  if (!text) return;
+
+  const actx = getCtx();
+  const packet = buildPacket(text);
+  const samples = generateAFSK(packet);
+
+  // Animate waveform
+  drawWave(samples.subarray(0, Math.min(samples.length, 4000)));
+
+  const buf = actx.createBuffer(1, samples.length, ACTUAL_SR);
+  buf.copyToChannel(samples, 0);
+
+  const src = actx.createBufferSource();
+  src.buffer = buf;
+  src.connect(actx.destination);
+
+  setDot('active');
+  log(`TX → preamble (250ms) + sync 0xAB12 + "${text}" [${packet.length}B, CRC OK]`, 'log-tx');
+  document.getElementById('btnSend').disabled = true;
+
+  src.start();
+  src.onended = () => {
+    setDot('');
+    clearWave();
+    document.getElementById('btnSend').disabled = false;
+    log('TX complete', 'log-info');
+  };
+
+  document.getElementById('msg').value = '';
+}
+
+// ─── RECEIVE (Goertzel + sync-word state machine) ────────────
+let listening = false;
+let micStream = null;
+let rxProcessor = null;
+
+function goertzel(samples, freq, sampleRate) {
+  const omega = (2 * Math.PI * freq) / sampleRate;
+  const coeff = 2 * Math.cos(omega);
+  let s0 = 0, s1 = 0, s2 = 0;
+  for (const x of samples) {
+    s0 = x + coeff * s1 - s2;
+    s2 = s1; s1 = s0;
+  }
+  return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+}
+
+// RX state machine states:
+//   IDLE   — ignoring audio, waiting for carrier energy
+//   CARRIER— energy detected, scanning bit-by-bit for sync word
+//   DATA   — sync word matched, collecting UART bytes for full packet
+const RX_IDLE    = 0;
+const RX_CARRIER = 1;
+const RX_DATA    = 2;
+
+// ─── Mic permission modal ─────────────────────────────────────
+let micPermission = 'prompt'; // 'prompt' | 'granted' | 'denied'
+
+// Check if browser already granted permission
+if (navigator.permissions) {
+  navigator.permissions.query({ name: 'microphone' }).then(r => {
+    micPermission = r.state;
+    r.onchange = () => { micPermission = r.state; };
+  }).catch(() => {});
+}
+
+function showMicModal() {
+  document.getElementById('micModal').classList.add('show');
+}
+
+function hideMicModal() {
+  document.getElementById('micModal').classList.remove('show');
+}
+
+// grantMic is called directly by the Allow button onclick.
+// getUserMedia MUST be called here — synchronously inside the user gesture —
+// otherwise Android rejects it as "not triggered by user activation".
+async function grantMic() {
+  hideMicModal();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl:  false
+      },
+      video: false
+    });
+    micPermission = 'granted';
+  } catch(e) {
+    micPermission = 'denied';
+    log('Microphone access denied: ' + e.message, 'log-err');
+    return;
+  }
+  startListen(); // stream already acquired, just wire up audio graph
+}
+
+function denyMic() {
+  hideMicModal();
+  log('Microphone access denied by user.', 'log-err');
+}
+
+async function toggleListen() {
+  if (listening) { stopListen(); return; }
+
+  if (micPermission === 'granted') {
+    // Permission already granted — still must call getUserMedia inside this gesture
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        video: false
+      });
+    } catch(e) {
+      log('Microphone error: ' + e.message, 'log-err');
+      return;
+    }
+    startListen();
+  } else {
+    showMicModal();
+  }
+}
+
+async function startListen() {
+  // micStream is always acquired before this is called (either via grantMic or toggleListen)
+  const actx = getCtx();       // sets ACTUAL_SR and SPB
+  await actx.resume();         // required on Android after user gesture
+
+  const src = actx.createMediaStreamSource(micStream);
+
+  // Use 4096 — a valid power-of-2 buffer that works on Android.
+  // We slice it into SPB-sized windows ourselves below.
+  const proc = actx.createScriptProcessor(4096, 1, 1);
+
+  let rxState     = RX_IDLE;
+  let shiftReg    = 0;
+  let rxBits      = [];
+  let sampleAccum = new Float32Array(0); // leftover samples between callbacks
+  const ENERGY_THRESH = 0.002;
+
+  proc.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0);
+    const sr  = ACTUAL_SR;
+    const spb = SPB;
+
+    // Merge leftovers with new chunk, then process full bit-windows
+    const merged = new Float32Array(sampleAccum.length + input.length);
+    merged.set(sampleAccum);
+    merged.set(input, sampleAccum.length);
+
+    let offset = 0;
+    while (offset + spb <= merged.length) {
+      const win = merged.subarray(offset, offset + spb);
+      offset += spb;
+
+      const mPow  = goertzel(win, MARK,  sr);
+      const sPow  = goertzel(win, SPACE, sr);
+      const energy = mPow + sPow;
+      const bit    = mPow >= sPow ? 1 : 0;
+
+      drawWave(win, rxState === RX_DATA ? '#ffd700' : rxState === RX_CARRIER ? '#ff8c00' : '#4a6264');
+
+      if (rxState === RX_IDLE) {
+        if (energy > ENERGY_THRESH) {
+          rxState = RX_CARRIER; shiftReg = 0; rxBits = [];
+          setDot('sync');
+          log('Carrier detected — scanning for sync word...', 'log-info');
+        }
+        continue;
+      }
+
+      if (energy < ENERGY_THRESH * 0.3) {
+        if (rxState === RX_CARRIER) { rxState = RX_IDLE; setDot('rx'); log('Carrier lost', 'log-info'); }
+        if (rxState === RX_DATA && rxBits.length > 10) {
+          tryDecode(rxBits); rxState = RX_IDLE; rxBits = []; setDot('rx');
+        }
+        continue;
+      }
+
+      if (rxState === RX_CARRIER) {
+        shiftReg = ((shiftReg << 1) | bit) & 0xFFFF;
+        if (shiftReg === SYNC_WORD) {
+          rxState = RX_DATA; rxBits = [];
+          setDot('rx');
+          log('✓ Sync word matched — receiving data...', 'log-rx');
+        }
+        continue;
+      }
+
+      if (rxState === RX_DATA) {
+        rxBits.push(bit);
+        if (rxBits.length >= 60 && rxBits.length % 10 === 0) {
+          if (tryDecode(rxBits)) { rxState = RX_IDLE; rxBits = []; setDot('rx'); }
+        }
+        if (rxBits.length > 2400) {
+          log('RX overflow — discarding', 'log-err');
+          rxState = RX_IDLE; rxBits = []; setDot('rx');
+        }
+      }
+    }
+    sampleAccum = merged.slice(offset);
+  };
+
+  src.connect(proc);
+  proc.connect(actx.destination);
+  rxProcessor = { proc, src };
+
+  listening = true;
+  setDot('rx');
+  document.getElementById('btnListen').textContent = '■ STOP';
+  document.getElementById('btnListen').classList.add('listening');
+  log(`RX ready — ${ACTUAL_SR}Hz / ${SPB} samples/bit — waiting for carrier...`, 'log-info');
+}
+
+function tryDecode(bits) {
+  const bytes = bitsToBytes(bits);
+  const result = parsePacket(bytes);
+  if (!result) return false;
+  if (result.ok) {
+    log(`RX ← "${result.text}" [CRC OK]`, 'log-rx');
+  } else {
+    log('RX ← [CRC FAIL – packet corrupted]', 'log-err');
+  }
+  return true;
+}
+
+function bitsToBytes(bits) {
+  const bytes = [];
+  // UART decode: find start bit (0), collect 8 data bits, stop bit (1)
+  let i = 0;
+  while (i < bits.length) {
+    if (bits[i] === 0) { // start bit
+      i++;
+      if (i + 8 >= bits.length) break;
+      let byte = 0;
+      for (let b = 0; b < 8; b++) byte |= (bits[i++] << b);
+      i++; // stop bit
+      bytes.push(byte);
+    } else i++;
+  }
+  return new Uint8Array(bytes);
+}
+
+function stopListen() {
+  if (rxProcessor) {
+    rxProcessor.src.disconnect();
+    rxProcessor.proc.disconnect();
+    rxProcessor = null;
+  }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  listening = false;
+  setDot('');
+  clearWave();
+  document.getElementById('btnListen').textContent = '◉ LISTEN';
+  document.getElementById('btnListen').classList.remove('listening');
+  log('RX stopped', 'log-info');
+}
+
+function setDot(cls) {
+  const d = document.getElementById('dot');
+  d.className = 'status-dot ' + cls;
+}
+
+// Enter to send
+document.getElementById('msg').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+</script>
+</body>
+</html>
